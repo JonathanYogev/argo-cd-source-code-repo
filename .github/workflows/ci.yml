@@ -43,8 +43,8 @@ jobs:
           context: ./source-code
           push: true
           tags: jonathanyogev01/hello-argo:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=jonathanyogev01/hello-argo:buildcache
+          cache-to: type=registry,ref=jonathanyogev01/hello-argo:buildcache,mode=max
 
       - name: Checkout GitOps repo
         uses: actions/checkout@v4
