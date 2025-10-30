@@ -33,7 +33,7 @@ jobs:
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push Docker image
@@ -54,16 +54,18 @@ jobs:
           token: ${{ secrets.GITOPS_REPO_TOKEN }}
 
       - name: Update values.dev.yaml and push to GitOps repo
+        env:
+          IMAGE_TAG: ${{ github.sha }}
         run: |
           cd gitops-repo
-          sed -i "s/^(\s*tag:\s*).*/\1\"${{ github.sha }}\"" helm-chart/values.dev.yaml
+          sed -i "s|^\(\s*tag:\s*\).*|\1$IMAGE_TAG|" helm-chart/values.dev.yaml
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add helm-chart/values.dev.yaml
-          if git diff --staged --quiet;
+          if git diff --staged --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "Update dev image tag for jonathanyogev01/hello-argo to ${{ github.sha }}"
+            git commit -m "Update dev image tag for jonathanyogev01/hello-argo to $IMAGE_TAG"
             git push
           fi
         working-directory: ${{ github.workspace }}
@@ -84,16 +86,16 @@ jobs:
       - name: Update values.prod.yaml and push to GitOps repo
         run: |
           cd gitops-repo
-          dev_tag_with_quotes=$(grep 'tag:' helm-chart/values.dev.yaml | awk '{print $2}')
-          echo "Updating prod image tag to $dev_tag_with_quotes"
-          sed -i "s/^(\s*tag:\s*).*/\1$dev_tag_with_quotes/" helm-chart/values.prod.yaml
+          IMAGE_TAG=$(grep 'tag:' helm-chart/values.dev.yaml | awk '{print $2}')
+          echo "Updating prod image tag to $IMAGE_TAG"
+          sed -i "s|^\(\s*tag:\s*\).*|\1$IMAGE_TAG|" helm-chart/values.prod.yaml
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add helm-chart/values.prod.yaml
-          if git diff --staged --quiet;
+          if git diff --staged --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "Promote image tag $dev_tag_with_quotes to prod"
+            git commit -m "Promote image tag $IMAGE_TAG to prod"
             git push
           fi
         working-directory: ${{ github.workspace }}
