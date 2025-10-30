@@ -1,12 +1,20 @@
-FROM node:14
+FROM node:18-alpine AS builder 
 
-WORKDIR /usr/src/app
+WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm install
+RUN npm install --production
 
 COPY . .
+
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/app.js .
+COPY --from=builder /app/package*.json .
 
 EXPOSE 8080
 
