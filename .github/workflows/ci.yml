@@ -58,7 +58,7 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           cd gitops-repo
-          sed -i "s/^\[[:space:]]*tag:[[:space:]]*\).*/\1\"$IMAGE_TAG\"/" helm-chart/values.dev.yaml
+          sed -i "s|^\(\s*tag:\s*\).*|\1$IMAGE_TAG|" helm-chart/values.dev.yaml
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add helm-chart/values.dev.yaml
