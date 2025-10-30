@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - '.github/workflows/**'
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '.github/workflows/**'
+
+jobs:
+  build-and-deploy-dev:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          path: source-code
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./source-code
+          push: true
+          tags: jonathanyogev01/hello-argo:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Checkout GitOps repo
+        uses: actions/checkout@v4
+        with:
+          repository: JonathanYogev/argocd-gitOps-repo
+          path: gitops-repo
+          token: ${{ secrets.GITOPS_REPO_TOKEN }}
+
+      - name: Update values.dev.yaml and push to GitOps repo
+        run: |
+          cd gitops-repo
+          sed -i "s/^(\s*tag:\s*).*/\1\"${{ github.sha }}\"" helm-chart/values.dev.yaml
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add helm-chart/values.dev.yaml
+          if git diff --staged --quiet;
+            echo "No changes to commit."
+          else
+            git commit -m "Update dev image tag for jonathanyogev01/hello-argo to ${{ github.sha }}"
+            git push
+          fi
+        working-directory: ${{ github.workspace }}
+
+  deploy-prod:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout GitOps repo
+        uses: actions/checkout@v4
+        with:
+          repository: JonathanYogev/argocd-gitOps-repo
+          path: gitops-repo
+          token: ${{ secrets.GITOPS_REPO_TOKEN }}
+
+      - name: Update values.prod.yaml and push to GitOps repo
+        run: |
+          cd gitops-repo
+          dev_tag_with_quotes=$(grep 'tag:' helm-chart/values.dev.yaml | awk '{print $2}')
+          echo "Updating prod image tag to $dev_tag_with_quotes"
+          sed -i "s/^(\s*tag:\s*).*/\1$dev_tag_with_quotes/" helm-chart/values.prod.yaml
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add helm-chart/values.prod.yaml
+          if git diff --staged --quiet;
+            echo "No changes to commit."
+          else
+            git commit -m "Promote image tag $dev_tag_with_quotes to prod"
+            git push
+          fi
+        working-directory: ${{ github.workspace }}
